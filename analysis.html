@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Comment Analysis Report</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    @keyframes progressMove {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .hidden { display: none; }
+    body {
+      background: #000;
+      color: #fff;
+      font-family: "Inter", sans-serif;
+      padding: 16px;
+    }
+    .page-container {
+      max-width: 900px;
+      margin: auto;
+    }
+    h1 {
+      text-align: center;
+      font-size: 24px;
+      font-weight: 800;
+      margin-bottom: 16px;
+    }
+    .card {
+      background: rgba(15, 15, 30, 0.8);
+      margin-bottom: 18px;
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: 0 0 16px 1px rgba(255, 60, 60, 0.25);
+    }
+    .green-card {
+      background: rgba(15, 87, 38, 0.8);
+      box-shadow: 0 0 16px 1px rgba(0, 255, 120, 0.4);
+    }
+    .red-card {
+      background: rgba(125, 15, 15, 0.9);
+      box-shadow: 0 0 16px 1px rgba(255, 0, 0, 0.4);
+    }
+    .section-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    ul { padding-left: 20px; }
+    #statusCard { background: rgba(60, 10, 10, 0.4); text-align: center; }
+    #errorCard { background: rgba(120, 0, 0, 0.5); display: none; }
+    .video-block {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .progress-wrapper {
+      width: 100%;
+      background: #3c0000;
+      border-radius: 999px;
+      height: 6px;
+      margin-top: 12px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      width: 35%;
+      height: 100%;
+      background: #ff4b4b;
+      animation: progressMove 1.6s linear infinite;
+    }
+    .sentiment-box {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    .sentiment-title { font-size: 15px; font-weight: 700; opacity: 0.8; }
+    .sentiment-value { font-size: 26px; font-weight: 900; margin-top: 4px; }
+    .positive-box { background: #089c65 !important; }
+    .negative-box { background: #c62828 !important; }
+    .neutral-box  { background: #6d6f74 !important; }
+    .sentiment-chart-container {
+      width: 100%;
+      max-width: 260px;
+      margin: 20px auto 10px auto;
+    }
+    #sentimentChart {
+      width: 100% !important;
+      height: 260px !important;
+    }
+  </style>
+</head>
+
+<body>
+<div class="page-container">
+  <button onclick="goBack()" style="margin-bottom:12px;">← Back</button>
+
+  <div class="video-block">
+    <div id="videoThumbWrapper"></div>
+    <div id="videoTitle"></div>
+  </div>
+
+  <h1>Comment Analysis Report</h1>
+
+  <div id="statusCard" class="card">
+    <div id="statusMain">Preparing analysis…</div>
+    <div id="statusSub"></div>
+    <div id="progressWrapper" class="progress-wrapper hidden">
+      <div class="progress-bar"></div>
+    </div>
+  </div>
+
+  <div id="errorCard" class="card">
+    <div id="errorText"></div>
+  </div>
+
+  <div id="analysisContent" class="hidden">
+    <div class="card">
+      <h2 class="section-title">Sentiment Split</h2>
+      <div class="sentiment-box positive-box"><div>POSITIVE</div><div id="posPct">--%</div></div>
+      <div class="sentiment-box negative-box"><div>NEGATIVE</div><div id="negPct">--%</div></div>
+      <div class="sentiment-box neutral-box"><div>NEUTRAL</div><div id="neuPct">--%</div></div>
+      <div class="sentiment-chart-container">
+        <canvas id="sentimentChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card"><div class="section-title">Overall Sentiment Summary</div><div id="summaryBox"></div></div>
+
+    <div class="card"><div class="section-title">Strategic Opportunity</div><button onclick="loadSection('strategic_opportunity')">Analyze</button><div id="strategic_opportunity"></div></div>
+    <div class="card green-card"><div class="section-title">Positive Feedback</div><button onclick="loadSection('positive_feedback')">Analyze</button><div id="positive_feedback"></div></div>
+    <div class="card red-card"><div class="section-title">Top Concerns</div><button onclick="loadSection('top_concerns')">Analyze</button><div id="top_concerns"></div></div>
+    <div class="card"><div class="section-title">Topics Discussed</div><button onclick="loadSection('topics_discussed')">Analyze</button><div id="topics_discussed"></div></div>
+    <div class="card"><div class="section-title">Content Ideas</div><button onclick="loadSection('content_ideas')">Analyze</button><div id="content_ideas"></div></div>
+  </div>
+</div>
+
+<script>
+const YT_API_KEY = "YOUR_YOUTUBE_API_KEY";
+const BACKEND = "http://localhost:3000";
+let VIDEO_ID = "";
+
+function goBack(){ location.href="index.html"; }
+
+function qs(){
+  const p=new URLSearchParams(location.search);
+  return {videoId:p.get("videoId"),title:p.get("title"),thumb:p.get("thumb")};
+}
+
+async function loadComments(videoId){
+  let c=[],t="";
+  while(c.length<1000){
+    const r=await fetch(`https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&maxResults=100&key=${YT_API_KEY}${t?`&pageToken=${t}`:""}`);
+    const d=await r.json();
+    (d.items||[]).forEach(i=>c.push(i.snippet.topLevelComment.snippet.textDisplay));
+    if(!d.nextPageToken) break;
+    t=d.nextPageToken;
+  }
+  return c;
+}
+
+async function init(){
+  const {videoId,title,thumb}=qs();
+  VIDEO_ID=videoId;
+  document.getElementById("videoTitle").textContent=decodeURIComponent(title||"");
+  if(thumb){const i=document.createElement("img");i.src=thumb;i.width=96;document.getElementById("videoThumbWrapper").appendChild(i);}
+  const comments=await loadComments(videoId);
+  const r=await fetch(`${BACKEND}/analyze/init`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({videoId,comments})
+  });
+  const j=await r.json();
+  document.getElementById("summaryBox").textContent=j.summary;
+  document.getElementById("posPct").textContent=j.sentiment.positive+"%";
+  document.getElementById("negPct").textContent=j.sentiment.negative+"%";
+  document.getElementById("neuPct").textContent=j.sentiment.neutral+"%";
+  updateChart(j.sentiment);
+  document.getElementById("statusCard").style.display="none";
+  document.getElementById("analysisContent").classList.remove("hidden");
+}
+
+async function loadSection(section){
+  const el=document.getElementById(section);
+  el.textContent="Loading…";
+  const r=await fetch(`${BACKEND}/analyze/section`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({videoId:VIDEO_ID,section})
+  });
+  const j=await r.json();
+  el.textContent=j.content;
+}
+
+let chart=null;
+function updateChart(s){
+  const ctx=document.getElementById("sentimentChart");
+  if(chart) chart.destroy();
+  chart=new Chart(ctx,{type:"doughnut",data:{labels:["Positive","Negative","Neutral"],datasets:[{data:[s.positive,s.negative,s.neutral]}]}});
+}
+
+init();
+</script>
+</body>
+</html>
